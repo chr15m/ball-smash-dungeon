@@ -5,8 +5,6 @@
             [sitefox.ui :refer [log]]
             ["rot-js" :as ROT]))
 
-(log "HI")
-
 (defn initial-state []
   {:screen :menu})
 
@@ -14,8 +12,9 @@
 
 (defn get-map []
   (js/console.log "hi")
-  (let [digger (ROT/Map.Digger. 25 25 (clj->js {:corridorLength [2 5]
-                                                :dugPercentage 0.5}))
+  (let [digger (ROT/Map.Digger. 25 25 (clj->js {:corridorLength [2 3]
+                                                :dugPercentage 0.3 ;TODO: increase this as you go deeper
+                                                }))
         positions (atom {})]
     (js/console.log digger)
     (.create digger
@@ -55,9 +54,18 @@
      [:p [:button {:on-click #(swap! state assoc :screen :game)} "resume game"]])
    [:p [:button {:on-click #(start-game state)} "new game"]]])
 
+(defn is-adjacent [[x y] tiles]
+  (>
+   (count
+     (filter identity
+             (for [ox [-1 0 1]
+                   oy [-1 0 1]]
+               (= (get tiles [(+ ox x) (+ oy y)]) 0))))
+   0))
+
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
-  (let [scale 20
+  (let [scale 40
         stroke-width 10
         game-map (:map @state)
         {:keys [size rooms corridors tiles]} game-map
@@ -69,6 +77,17 @@
                                     :y (* (- y 0.5) scale)
                                     :width scale
                                     :height scale})))
+        adjacent-positions (remove nil?
+                                   (for [[[x y] v] tiles]
+                                     (when (and (= v 1) (is-adjacent [x y] tiles))
+                                       {:key (str "adjacent" [x y])
+                                        :cx (* x scale)
+                                        :cy (* y scale)
+                                        :r (* scale 0.75)
+                                        :x (* (- x 0.5) scale)
+                                        :y (* (- y 0.5) scale)
+                                        :width scale
+                                        :height scale})))
         room-positions (for [r rooms]
                          (let [{:keys [_x1 _x2 _y1 _y2 _doors]} r
                                xs (expand-pos (sort [_x1 _x2]))
@@ -100,15 +119,48 @@
                                 :x (* (first xs) scale)
                                 :y (* (first ys) scale)
                                 :width (* w scale)
-                                :height (* h scale)}))]
+                                :height (* h scale)}))
+        [sx sy] (map #(+ (* % scale) (* scale 2)) size)]
     [:svg {:on-key-down #(process-game-key state %)
            :tabIndex 0
            :ref #(when % (.focus %))
-           :width (* (first size) scale)
-           :height (* (second size) scale)
+           :viewBox (str "-" scale " -" scale " " sx " " sy)
+           :width sx
+           :height sy
            ;:style {:transform "rotate(-25deg)"}
+           ;:style {:transform "scaleY(0.66)"}
            }
+
+     [:defs
+      [:pattern {:id "hatch"
+                 :x 0
+                 :y 0
+                 :width scale
+                 :height scale
+                 :pattern-units "userSpaceOnUse"
+                 ;:pattern-content-units "objectBoundingBox"
+                 }
+       [:rect {:x 0 :y 0 :width scale :height scale :fill "#FAF8F1"}]
+       [:path {:d (str
+                    "M " 0 ",0"
+                    "V " scale
+                    "M " (/ scale 3) ",0"
+                    "V " scale
+                    "M " (* (/ scale 3) 2) ",0"
+                    "V " scale)
+               :stroke-width 1
+               :stroke "#555"}]]]
+
      ; draw hatching
+
+     (for [{:keys [cx cy r] :as pos} adjacent-positions]
+       [:g {:transform (str "rotate(" (* (js/Math.random) 360) " " cx " " cy ")" )}
+        [:circle {:key (:key pos)
+                  :fill "url(#hatch)"
+                  :cx (+ cx (* (- (js/Math.random) 0.5) (* scale 0.5)))
+                  :cy (+ cy (* (- (js/Math.random) 0.5) (* scale 0.5)))
+                  :r r}]])
+
      ; draw outlines
 
      (for [pos-map room-positions]
@@ -140,7 +192,11 @@
                      {:fill "#E9E7DC"})])
 
      (for [pos-map corridor-positions]
-       [:rect (merge pos-map {:fill "#E9E7DC"})])]))
+       [:rect (merge pos-map {:fill "#E9E7DC"})])
+
+     ; draw greebles
+
+     ]))
 
 (defn component-main [state]
   [:main
