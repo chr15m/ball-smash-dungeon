@@ -14,7 +14,8 @@
 
 (defn get-map []
   (js/console.log "hi")
-  (let [digger (ROT/Map.Digger.)
+  (let [digger (ROT/Map.Digger. 25 25 (clj->js {:corridorLength [2 5]
+                                                :dugPercentage 0.5}))
         positions (atom {})]
     (js/console.log digger)
     (.create digger
@@ -56,13 +57,14 @@
 
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
-  (let [scale 10
+  (let [scale 20
+        stroke-width 10
         game-map (:map @state)
         {:keys [size rooms corridors tiles]} game-map
         tile-positions (remove nil?
                                (for [[[x y] v] tiles]
                                  (when (= v 0)
-                                   {:key (str "tile" x y)
+                                   {:key (str "tile" [x y])
                                     :x (* (- x 0.5) scale)
                                     :y (* (- y 0.5) scale)
                                     :width scale
@@ -72,13 +74,21 @@
                                xs (expand-pos (sort [_x1 _x2]))
                                ys (expand-pos (sort [_y1 _y2]))
                                w (- (second xs) (first xs))
-                               h (- (second ys) (first ys))]
-                           (log "doors" _doors)
+                               h (- (second ys) (first ys))
+                               doors (for [[xy v] _doors]
+                                       (let [[x y] (-> xy name (.split ",") (.map #(js/parseInt %)))]
+                                         {:key (str "door" [x y])
+                                          :x (* (- x 0.5) scale)
+                                          :y (* (- y 0.5) scale)
+                                          :width scale
+                                          :height scale}))]
+                           (log "doors" doors)
                            {:key (str "room" xs ys)
                             :x (* (first xs) scale)
                             :y (* (first ys) scale)
                             :width (* w scale)
-                            :height (* h scale)}))
+                            :height (* h scale)
+                            :doors doors}))
         corridor-positions (for [c corridors]
                              (let [{:keys [_startX _startY _endX _endY]} c
                                    [_x1 _x2 _y1 _y2] [_startX _endX _startY _endY]
@@ -86,7 +96,8 @@
                                    ys (expand-pos (sort [_y1 _y2]))
                                    w (- (second xs) (first xs))
                                    h (- (second ys) (first ys))]
-                               {:x (* (first xs) scale)
+                               {:key (str "corridor" xs ys)
+                                :x (* (first xs) scale)
                                 :y (* (first ys) scale)
                                 :width (* w scale)
                                 :height (* h scale)}))]
@@ -99,21 +110,37 @@
            }
      ; draw hatching
      ; draw outlines
-     ; draw interiors
-     (for [pos-map tile-positions]
-       [:rect (merge pos-map {:fill "#333"})])
 
      (for [pos-map room-positions]
-       [:g
-        #_ [:rect (merge pos-map
-                         {:stroke "#cdcdcd"
-                          :stroke-width 5
-                          :stroke-linejoin "round"})]
-        [:rect (merge pos-map
-                      {:fill "#777"})]])
+       [:rect (merge pos-map
+                     {:stroke "#5A5A56"
+                      :stroke-width stroke-width
+                      :stroke-linejoin "round"})])
+
+     (for [{:keys [doors]} room-positions]
+       (for [pos-map doors]
+         [:rect (merge pos-map {:stroke "#5A5A56"
+                                :stroke-width stroke-width
+                                :stroke-linejoin "round"})]))
 
      (for [pos-map corridor-positions]
-       [:rect (merge pos-map {:fill "#555"})])]))
+       [:rect (merge pos-map {:stroke "#5A5A56"
+                              :stroke-width stroke-width
+                              :stroke-linejoin "round"})])
+
+     ; draw interiors
+
+     (for [{:keys [doors]} room-positions]
+       (for [pos-map doors]
+         [:rect (merge pos-map {:fill "#E9E7DC"})]))
+
+     (for [pos-map room-positions]
+
+       [:rect (merge pos-map
+                     {:fill "#E9E7DC"})])
+
+     (for [pos-map corridor-positions]
+       [:rect (merge pos-map {:fill "#E9E7DC"})])]))
 
 (defn component-main [state]
   [:main
