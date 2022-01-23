@@ -137,7 +137,7 @@
                                h (- (second ys) (first ys))
                                doors (for [[xy _v] _doors]
                                        (let [[x y] (-> xy name (.split ",") (.map #(js/parseInt %)))]
-                                         {:key (str "door" [x y])
+                                         {:key (str "door" [x y] xs ys)
                                           :x (* (- x 0.5) scale)
                                           :y (* (- y 0.5) scale)
                                           :width scale
