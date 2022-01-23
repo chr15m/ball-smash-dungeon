@@ -10,6 +10,7 @@
     "google-font-installer": "^1.2.0",
     "json-stringify-safe": "5.0.1",
     "keyv": "4.0.5",
+    "matter-js": "^0.18.0",
     "morgan": "1.10.0",
     "node-html-parser": "4.1.5",
     "nodemailer": "6.7.2",

@@ -3,7 +3,8 @@
             [reagent.dom :as rdom]
             ;[applied-science.js-interop :as j]
             [sitefox.ui :refer [log]]
-            ["rot-js" :as ROT]))
+            ["rot-js" :as ROT]
+            [smash.physics :refer [simulate]]))
 
 (log "loaded")
 
@@ -160,8 +161,14 @@
                                 :y (* (first ys) scale)
                                 :width (* w scale)
                                 :height (* h scale)}))
-        [sx sy] (map #(+ (* % scale) (* scale 2)) size)]
+        [sx sy] (map #(+ (* % scale) (* scale 2)) size)
+        room1 (first room-positions)
+        thing {:x (+ (:x room1) (/ (:width room1) 2))
+               :y (+ (:y room1) (/ (:height room1) 2))
+               :radius 10
+               :velocity [0.05 0.05]}]
     [:svg {:on-key-down #(process-game-key state %)
+           :on-click #(simulate adjacent-positions [thing])
            :tabIndex 0
            :ref #(when % (.focus %))
            :viewBox (str "-" scale " -" scale " " sx " " sy)
