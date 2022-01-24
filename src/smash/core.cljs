@@ -1,4 +1,5 @@
 (ns smash.core
+  {:clj-kondo/config '{:lint-as {applied-science.js-interop/let clojure.core/let}}}
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]
             ;[applied-science.js-interop :as j]
@@ -41,6 +42,7 @@
   (swap! state
          #(-> %
               (assoc :map (get-map))
+              (dissoc :simulation)
               (assoc :screen :game))))
 
 (defn process-game-key [state ev]
@@ -78,6 +80,12 @@
                (= (get tiles [(+ ox x) (+ oy y)]) 0))))
    0))
 
+(defn run-simulation [state adjacent-tiles entities]
+  (swap! state assoc :simulation
+         (simulate adjacent-tiles entities)))
+
+; *** components *** ;
+
 (defn component-menu [state]
   [:div#menu
    [:h1 "ball smash" [:br] "dungeon"]
@@ -112,13 +120,13 @@
         game-map (:map @state)
         {:keys [size rooms corridors tiles]} game-map
         _tile-positions (remove nil?
-                               (for [[[x y] v] tiles]
-                                 (when (= v 0)
-                                   {:key (str "tile" [x y])
-                                    :x (* (- x 0.5) scale)
-                                    :y (* (- y 0.5) scale)
-                                    :width scale
-                                    :height scale})))
+                                (for [[[x y] v] tiles]
+                                  (when (= v 0)
+                                    {:key (str "tile" [x y])
+                                     :x (* (- x 0.5) scale)
+                                     :y (* (- y 0.5) scale)
+                                     :width scale
+                                     :height scale})))
         adjacent-positions (remove nil?
                                    (for [[[x y] v] tiles]
                                      (when (and (= v 1) (is-adjacent-tile [x y] tiles))
@@ -166,14 +174,17 @@
         thing {:x (+ (:x room1) (/ (:width room1) 2))
                :y (+ (:y room1) (/ (:height room1) 2))
                :radius 10
-               :velocity [0.05 0.05]}]
+               :velocity [5 2]
+               :uuid (.slice (str (random-uuid)) 0 8)}]
     [:svg {:on-key-down #(process-game-key state %)
-           :on-click #(simulate adjacent-positions [thing])
+           :on-click #(run-simulation state adjacent-positions [thing])
            :tabIndex 0
            :ref #(when % (.focus %))
            :viewBox (str "-" scale " -" scale " " sx " " sy)
            :width sx
            :height sy}
+
+     [:text {:x 0 :y 0} (count (-> @state :simulation :sim)) " frames"]
 
      [component-defs scale]
 
@@ -210,21 +221,43 @@
 
      (for [{:keys [doors]} room-positions
            pos-map doors]
-
-         [:rect (merge pos-map {:fill "#E9E7DC"})])
+       [:rect (merge pos-map {:fill "#E9E7DC"})])
 
      (for [pos-map room-positions]
-       [:rect (merge pos-map {:fill "#E9E7DC"})])
+       [:rect (merge (dissoc pos-map :doors) {:fill "#E9E7DC"})])
 
      (for [pos-map corridor-positions]
        [:rect (merge pos-map {:fill "#E9E7DC"})])
 
      ; draw greebles
+
      (for [pos room-positions]
        (generate-greebles pos))
 
-    (for [pos corridor-positions]
-       (generate-greebles pos))]))
+     (for [pos corridor-positions]
+       (generate-greebles pos))
+
+     (for [step (-> @state :simulation :sim)
+           body step]
+       [:circle {:cx (-> body :position :x)
+                 :cy (-> body :position :y)
+                 :r (-> body :entity :radius)
+                 :fill "none"
+                 :stroke "red"}])
+
+     ; draw level rects
+     #_ (for [body (-> @state :simulation :bodies)]
+          (let [v1 (nth (:vertices body) 0)
+                v2 (nth (:vertices body) 1)
+                v3 (nth (:vertices body) 2)
+                v4 (nth (:vertices body) 3)]
+            [:path {:d (str "M " (:x v1) " " (:y v1) " "
+                            "L " (:x v2) " " (:y v2) " "
+                            "L " (:x v3) " " (:y v3) " "
+                            "L " (:x v4) " " (:y v4) " "
+                            "L " (:x v1) " " (:y v1))
+                    :stroke "red"
+                    :fill "none"}]))]))
 
 (defn component-main [state]
   [:main
