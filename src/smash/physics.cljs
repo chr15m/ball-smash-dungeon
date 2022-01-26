@@ -32,6 +32,7 @@
                                         (:height %)
                                         #js {:isStatic true
                                              :friction 0
+                                             :frictionStatic 0
                                              :restitution 1.0})
                            adjacent-tiles)
         entity-bodies (map (fn [e]

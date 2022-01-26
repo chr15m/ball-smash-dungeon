@@ -9,6 +9,9 @@
 
 (log "loaded")
 
+(def initial-scale 25)
+(def map-size 25)
+
 (defn initial-state []
   {:screen :menu})
 
@@ -16,7 +19,7 @@
 
 (defn get-map []
   (js/console.log "hi")
-  (let [digger (ROT/Map.Digger. 25 25
+  (let [digger (ROT/Map.Digger. map-size map-size
                                 (clj->js {:corridorLength [1 7]
                                           :roomWidth [4 8]
                                           :roomHeight [4 8]
@@ -108,12 +111,14 @@
      :corridor-positions corridor-positions}))
 
 (defn start-game [state]
-  (let [scale 50
+  (let [scale initial-scale
+        seed (ROT/RNG.getUniform)
         game-map (get-map)]
     (swap! state
            #(-> %
+                (assoc :seed seed)
                 (assoc :scale scale)
-                (assoc :map game-map)
+                (assoc :game-map game-map)
                 (assoc :level (calculate-level game-map scale))
                 (dissoc :simulation)
                 (assoc :screen :game)))))
@@ -154,7 +159,7 @@
   [:div#menu
    [:h1 "ball smash" [:br] "dungeon"]
    [:p "a video game about smashing balls"]
-   (when (:map @state)
+   (when (:game-map @state)
      [:p [:button {:on-click #(swap! state assoc :screen :game)} "resume game"]])
    [:p [:button {:on-click #(start-game state)} "new game"]]])
 
@@ -192,8 +197,7 @@
 
 (defn animate-body [steps]
   (let [ms (* (count steps) (/ 1000 120))]
-    [:circle {:key (js/Math.random)
-              :cx (-> steps first :position :x)
+    [:circle {:cx (-> steps first :position :x)
               :cy (-> steps first :position :y)
               :r (-> steps first :entity :radius)
               :fill "#5A5A56"}
@@ -230,11 +234,11 @@
     [:g
      ; draw hatching
      (for [{:keys [cx cy r] :as pos} adjacent-positions]
-       [:g {:transform (str "rotate(" (* (js/Math.random) 360) " " cx " " cy ")" )}
+       [:g {:transform (str "rotate(" (* (ROT/RNG.getUniform) 360) " " cx " " cy ")" )}
         [:circle {:key (:key pos)
                   :fill "url(#hatch)"
-                  :cx (+ cx (* (- (js/Math.random) 0.5) (* scale 0.5)))
-                  :cy (+ cy (* (- (js/Math.random) 0.5) (* scale 0.5)))
+                  :cx (+ cx (* (- (ROT/RNG.getUniform) 0.5) (* scale 0.5)))
+                  :cy (+ cy (* (- (ROT/RNG.getUniform) 0.5) (* scale 0.5)))
                   :r r}]])
 
      ; draw outlines
@@ -279,7 +283,7 @@
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
   (let [scale (:scale @state)
-        game-map (:map @state)
+        game-map (:game-map @state)
         level (:level @state)
         size (:size game-map)
         [sx sy] (map #(+ (* % scale) (* scale 2)) size)
