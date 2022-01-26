@@ -31,16 +31,17 @@
                                         (:width %)
                                         (:height %)
                                         #js {:isStatic true
-                                             :restitution 0.9})
+                                             :friction 0
+                                             :restitution 1.0})
                            adjacent-tiles)
         entity-bodies (map (fn [e]
-                             (let [body (.circle Matter/Bodies (:x e) (:y e) (:radius e) (clj->js {:frictionAir 0.001
-                                                                                                   :friction 0.01
-                                                                                                   :restitution 0.9}))
+                             (let [body (.circle Matter/Bodies (:x e) (:y e) (:radius e) (clj->js {:frictionAir 0.01
+                                                                                                   :friction 0
+                                                                                                   :restitution 1.0}))
                                    [x y] (:velocity e)
                                    velocity (.create Matter/Vector x y)]
                                (.setVelocity Matter/Body body velocity)
-                               (.setAngularVelocity Matter/Body body 0.01)
+                               ;(.setAngularVelocity Matter/Body body 0.01)
                                ;(.setFriction Matter/Body body 0 0 0)
                                (aset body "uuid" (:uuid e))
                                (aset body "entity" e)
