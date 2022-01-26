@@ -38,39 +38,6 @@
 (defn expand-pos [[x y]]
   [(- x 0.5) (+ y 0.5)])
 
-(defn start-game [state]
-  (swap! state
-         #(-> %
-              (assoc :map (get-map))
-              (dissoc :simulation)
-              (assoc :screen :game))))
-
-(defn process-game-key [state ev]
-  (js/console.log (aget ev "keyCode"))
-  (case (aget ev "keyCode")
-    27 (swap! state assoc :screen :menu)
-    nil))
-
-(defn generate-greebles [{:keys [x y width height]}]
-  (let [greeble-count (inc (int (* (ROT/RNG.getUniform) 5)))]
-    (for [_g (range greeble-count)]
-      (let [gs (* (ROT/RNG.getUniform) 5)
-            [rx ry] (map (fn [_] (ROT/RNG.getItem #js [1 2])) (range 2))
-            [gx gy] (map #(* (ROT/RNG.getUniform) (nth [width height] %)) (range 2))
-            [gxf gyf] (map #(+ (* (- (ROT/RNG.getUniform) 0.5) 20) %) [gx gy])]
-        (case (ROT/RNG.getItem #js [:circle :arc])
-          :circle [:circle {:cx (+ x gx) :cy (+ y gy) :r gs
-                            :fill "none"
-                            :stroke "#5A5A56"
-                            :stroke-width 1}]
-          :arc [:path {:d (str "M " (+ x gx) "," (+ y gy)
-                               "A " rx " " ry " "
-                               "0 0 1"
-                               (+ x gxf) " " (+ y gyf))
-                       :fill "none"
-                       :stroke "#5A5A56"
-                       :stroke-width 1}])))))
-
 (defn is-adjacent-tile [[x y] tiles]
   (>
    (count
@@ -80,89 +47,16 @@
                (= (get tiles [(+ ox x) (+ oy y)]) 0))))
    0))
 
-(defn run-simulation! [state adjacent-tiles entities]
-  (swap! state assoc :simulation
-         (simulate adjacent-tiles entities)))
-
-; *** components *** ;
-
-(defn component-menu [state]
-  [:div#menu
-   [:h1 "ball smash" [:br] "dungeon"]
-   [:p "a video game about smashing balls"]
-   (when (:map @state)
-     [:p [:button {:on-click #(swap! state assoc :screen :game)} "resume game"]])
-   [:p [:button {:on-click #(start-game state)} "new game"]]])
-
-(defn component-defs [scale]
-  [:defs
-   [:pattern {:id "hatch"
-              :x 0
-              :y 0
-              :width scale
-              :height scale
-              :pattern-units "userSpaceOnUse"}
-    [:rect {:x 0 :y 0 :width scale :height scale :fill "#FAF8F1"}]
-    [:path {:d (str
-                 "M " 0 ",0"
-                 "V " scale
-                 "M " (/ scale 3) ",0"
-                 "V " scale
-                 "M " (* (/ scale 3) 2) ",0"
-                 "V " scale)
-            :stroke-width 1
-            :stroke "#555"}]]])
-
-(defn offset-tuple [steps s]
-  (str
-    (int (- (-> s :position :x) (-> steps first :position :x)))
-    " "
-    (int (- (-> s :position :y) (-> steps first :position :y)))))
-
-(defn compute-path [steps]
-  (str
-    "M 0 0"
-    (apply str
-           (for [s (rest steps)]
-             (str "L " (offset-tuple steps s))))))
-
-(defn animate-body [steps]
-  (let [ms (* (count steps) (/ 1000 120))]
-    [:circle {:cx (-> steps first :position :x)
-              :cy (-> steps first :position :y)
-              :r (-> steps first :entity :radius)
-              :fill "#5A5A56"}
-     [:animateMotion {:dur (str ms "ms")
-                     :repeatCount 1
-                     :path (compute-path steps)}]]))
-
-(defn component-animated-bodies [simulation]
-  (let [animated-bodies
-        (vals (reduce
-                (fn [body-steps step]
-                  (reduce
-                    (fn [body-steps body]
-                      (update-in body-steps [(:uuid body)] conj body))
-                    body-steps step))
-                {} simulation))]
-    [:g
-     (for [body animated-bodies]
-       (animate-body (reverse body)))]))
-
-(defn component-game [state]
-  (js/console.log "state" (clj->js @state))
-  (let [scale 30
-        stroke-width 7
-        game-map (:map @state)
-        {:keys [size rooms corridors tiles]} game-map
-        _tile-positions (remove nil?
-                                (for [[[x y] v] tiles]
-                                  (when (= v 0)
-                                    {:key (str "tile" [x y])
-                                     :x (* (- x 0.5) scale)
-                                     :y (* (- y 0.5) scale)
-                                     :width scale
-                                     :height scale})))
+(defn calculate-level [game-map scale]
+  (let [{:keys [rooms corridors tiles]} game-map
+        tile-positions (remove nil?
+                               (for [[[x y] v] tiles]
+                                 (when (= v 0)
+                                   {:key (str "tile" [x y])
+                                    :x (* (- x 0.5) scale)
+                                    :y (* (- y 0.5) scale)
+                                    :width scale
+                                    :height scale})))
         adjacent-positions (remove nil?
                                    (for [[[x y] v] tiles]
                                      (when (and (= v 1) (is-adjacent-tile [x y] tiles))
@@ -204,30 +98,129 @@
                                 :x (* (first xs) scale)
                                 :y (* (first ys) scale)
                                 :width (* w scale)
-                                :height (* h scale)}))
-        [sx sy] (map #(+ (* % scale) (* scale 2)) size)
-        room1 (first room-positions)
-        thing {:x (+ (:x room1) (/ (:width room1) 2))
-               :y (+ (:y room1) (/ (:height room1) 2))
-               :radius 10
-               :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
-               :uuid (.slice (str (random-uuid)) 0 8)}
-        simulation (-> @state :simulation :sim)]
-    [:svg {:key (js/Math.random)
-           :on-key-down #(process-game-key state %)
-           :on-click #(run-simulation! state adjacent-positions [thing])
-           :tabIndex 0
-           :ref #(when % (.focus %))
-           :viewBox (str "-" scale " -" scale " " sx " " sy)
-           :width sx
-           :height sy}
+                                :height (* h scale)}))]
+    {:tile-positions tile-positions
+     :adjacent-positions adjacent-positions
+     :room-positions room-positions
+     :corridor-positions corridor-positions}))
 
-     [:text {:x 0 :y 0} (count (-> @state :simulation :sim)) " frames"]
+(defn start-game [state]
+  (let [scale 20
+        game-map (get-map)]
+    (swap! state
+           #(-> %
+                (assoc :scale scale)
+                (assoc :map game-map)
+                (assoc :level (calculate-level game-map scale))
+                (dissoc :simulation)
+                (assoc :screen :game)))))
 
-     [component-defs scale]
+(defn process-game-key [state ev]
+  (js/console.log (aget ev "keyCode"))
+  (case (aget ev "keyCode")
+    27 (swap! state assoc :screen :menu)
+    nil))
 
+(defn generate-greebles [{:keys [x y width height]}]
+  (let [greeble-count (inc (int (* (ROT/RNG.getUniform) 5)))]
+    (for [_g (range greeble-count)]
+      (let [gs (* (ROT/RNG.getUniform) 5)
+            [rx ry] (map (fn [_] (ROT/RNG.getItem #js [1 2])) (range 2))
+            [gx gy] (map #(* (ROT/RNG.getUniform) (nth [width height] %)) (range 2))
+            [gxf gyf] (map #(+ (* (- (ROT/RNG.getUniform) 0.5) 20) %) [gx gy])]
+        (case (ROT/RNG.getItem #js [:circle :arc])
+          :circle [:circle {:cx (+ x gx) :cy (+ y gy) :r gs
+                            :fill "none"
+                            :stroke "#5A5A56"
+                            :stroke-width 1}]
+          :arc [:path {:d (str "M " (+ x gx) "," (+ y gy)
+                               "A " rx " " ry " "
+                               "0 0 1"
+                               (+ x gxf) " " (+ y gyf))
+                       :fill "none"
+                       :stroke "#5A5A56"
+                       :stroke-width 1}])))))
+
+(defn run-simulation! [state adjacent-tiles entities]
+  (swap! state assoc :simulation
+         (simulate adjacent-tiles entities)))
+
+; *** components *** ;
+
+(defn component-menu [state]
+  [:div#menu
+   [:h1 "ball smash" [:br] "dungeon"]
+   [:p "a video game about smashing balls"]
+   (when (:map @state)
+     [:p [:button {:on-click #(swap! state assoc :screen :game)} "resume game"]])
+   [:p [:button {:on-click #(start-game state)} "new game"]]])
+
+(defn component-defs [scale]
+  [:defs
+   [:pattern {:id "hatch"
+              :x 0
+              :y 0
+              :width scale
+              :height scale
+              :pattern-units "userSpaceOnUse"}
+    [:rect {:x 0 :y 0 :width scale :height scale :fill "#FAF8F1"}]
+    [:path {:d (str
+                 "M " 0 ",0"
+                 "V " scale
+                 "M " (/ scale 3) ",0"
+                 "V " scale
+                 "M " (* (/ scale 3) 2) ",0"
+                 "V " scale)
+            :stroke-width 1
+            :stroke "#555"}]]])
+
+(defn offset-tuple [steps s]
+  (str
+    (int (- (-> s :position :x) (-> steps last :position :x)))
+    " "
+    (int (- (-> s :position :y) (-> steps last :position :y)))))
+
+(defn compute-path [steps]
+  (str
+    "M 0 0"
+    (apply str
+           (for [s (rest steps)]
+             (str "L " (offset-tuple steps s))))))
+
+(defn animate-body [steps]
+  (let [ms (* (count steps) (/ 1000 120))]
+    [:circle {:cx (-> steps last :position :x)
+              :cy (-> steps last :position :y)
+              :r (-> steps first :entity :radius)
+              :fill "#5A5A56"}
+     [:animateMotion {:dur (str ms "ms")
+                     :repeatCount 1
+                     :path (compute-path steps)}]]))
+
+(defn component-animated-bodies [state]
+  (let [simulation (-> @state :simulation :sim)
+        animated-bodies
+        (vals (reduce
+                (fn [body-steps step]
+                  (reduce
+                    (fn [body-steps body]
+                      (update-in body-steps [(:uuid body)] conj body))
+                    body-steps step))
+                {} simulation))]
+    [:g
+     (for [body animated-bodies]
+       (animate-body (reverse body)))]))
+
+(defn component-simulation-count [state]
+  (let [simulation (-> @state :simulation :sim)]
+    [:text {:x 0 :y 0} (count simulation) " frames"]))
+
+(defn component-background [level scale]
+  (js/console.log "render background")
+  (let [stroke-width 7
+        {:keys [adjacent-positions room-positions corridor-positions]} level]
+    [:g
      ; draw hatching
-
      (for [{:keys [cx cy r] :as pos} adjacent-positions]
        [:g {:transform (str "rotate(" (* (js/Math.random) 360) " " cx " " cy ")" )}
         [:circle {:key (:key pos)
@@ -273,17 +266,45 @@
        (generate-greebles pos))
 
      (for [pos corridor-positions]
-       (generate-greebles pos))
+       (generate-greebles pos))]))
 
-     #_ (for [step (-> @state :simulation :sim)
+(defn component-game [state]
+  (js/console.log "state" (clj->js @state))
+  (let [scale (:scale @state)
+        game-map (:map @state)
+        level (:level @state)
+        size (:size game-map)
+        [sx sy] (map #(+ (* % scale) (* scale 2)) size)
+        room1 (first (:room-positions level))
+        thing {:x (+ (:x room1) (/ (:width room1) 2))
+               :y (+ (:y room1) (/ (:height room1) 2))
+               :radius 10
+               :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
+               :uuid (.slice (str (random-uuid)) 0 8)}]
+    [:svg {:key (js/Math.random)
+           :on-key-down #(process-game-key state %)
+           :on-click #(run-simulation! state (:adjacent-positions level) [thing])
+           :tabIndex 0
+           :ref #(when % (.focus %))
+           :viewBox (str "-" scale " -" scale " " sx " " sy)
+           :width sx
+           :height sy}
+
+     [component-defs scale]
+
+     [component-background level scale]
+
+     [component-simulation-count state]
+
+     [component-animated-bodies state]
+
+     #_ (for [step simulation
            body step]
        [:circle {:cx (-> body :position :x)
                  :cy (-> body :position :y)
                  :r (-> body :entity :radius)
                  :fill "none"
                  :stroke "red"}])
-
-     [component-animated-bodies simulation]
 
      ; draw level rects
      #_ (for [body (-> @state :simulation :bodies)]

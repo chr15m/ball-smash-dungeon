@@ -49,15 +49,15 @@
                                body)) entities)]
     (log (first entity-bodies))
     (.add Matter/Composite (.-world e) (clj->js (concat static-bodies entity-bodies)))
-    (doall
+    (js/console.log "updates:"
       (loop [c 0]
-        (js/console.log "update:" c)
         (.update Matter/Engine e (/ 1000 60))
         (swap! sim conj (doall (map serialize-body entity-bodies)))
         ; store positions etc.
-        (when (or (not (all-bodies-at-rest (.allBodies Matter/Composite (.-world e))))
+        (if (or (not (all-bodies-at-rest (.allBodies Matter/Composite (.-world e))))
                   (< c 3))
-          (recur (inc c)))))
+          (recur (inc c))
+          c)))
     (log "sim" @sim)
     (log "bodies" static-bodies)
     {:sim @sim :bodies (map serialize-body static-bodies)}))
