@@ -2,7 +2,7 @@
   {:clj-kondo/config '{:lint-as {applied-science.js-interop/let clojure.core/let}}}
   (:require [reagent.core :as r]
             [reagent.dom :as rdom]
-            ;[applied-science.js-interop :as j]
+            [applied-science.js-interop :as j]
             [sitefox.ui :refer [log]]
             ["rot-js" :as ROT]
             [smash.physics :refer [simulate]]))
@@ -16,9 +16,12 @@
 
 (defn get-map []
   (js/console.log "hi")
-  (let [digger (ROT/Map.Digger. 25 25 (clj->js {:corridorLength [2 3]
-                                                :dugPercentage 0.3 ;TODO: increase this as you go deeper
-                                                }))
+  (let [digger (ROT/Map.Digger. 25 25
+                                (clj->js {:corridorLength [1 7]
+                                          :roomWidth [4 8]
+                                          :roomHeight [4 8]
+                                          :dugPercentage 0.15 ;TODO: increase this as you go deeper
+                                          }))
         positions (atom {})]
     (js/console.log digger)
     (.create digger
@@ -105,7 +108,7 @@
      :corridor-positions corridor-positions}))
 
 (defn start-game [state]
-  (let [scale 20
+  (let [scale 50
         game-map (get-map)]
     (swap! state
            #(-> %
@@ -176,9 +179,9 @@
 
 (defn offset-tuple [steps s]
   (str
-    (int (- (-> s :position :x) (-> steps last :position :x)))
+    (int (- (-> s :position :x) (-> steps first :position :x)))
     " "
-    (int (- (-> s :position :y) (-> steps last :position :y)))))
+    (int (- (-> s :position :y) (-> steps first :position :y)))))
 
 (defn compute-path [steps]
   (str
@@ -189,12 +192,15 @@
 
 (defn animate-body [steps]
   (let [ms (* (count steps) (/ 1000 120))]
-    [:circle {:cx (-> steps last :position :x)
-              :cy (-> steps last :position :y)
+    [:circle {:key (js/Math.random)
+              :cx (-> steps first :position :x)
+              :cy (-> steps first :position :y)
               :r (-> steps first :entity :radius)
               :fill "#5A5A56"}
      [:animateMotion {:dur (str ms "ms")
                      :repeatCount 1
+                     :fill "freeze" ; pause at the end
+                     :begin "50ms"
                      :path (compute-path steps)}]]))
 
 (defn component-animated-bodies [state]
@@ -207,7 +213,10 @@
                       (update-in body-steps [(:uuid body)] conj body))
                     body-steps step))
                 {} simulation))]
-    [:g
+    [:g {:ref (fn [el]
+                ; reset the SVG timing so the animations play
+                (when el
+                  (j/call-in el [:parentNode :setCurrentTime] 0)))}
      (for [body animated-bodies]
        (animate-body (reverse body)))]))
 
@@ -216,7 +225,6 @@
     [:text {:x 0 :y 0} (count simulation) " frames"]))
 
 (defn component-background [level scale]
-  (js/console.log "render background")
   (let [stroke-width 7
         {:keys [adjacent-positions room-positions corridor-positions]} level]
     [:g
@@ -278,11 +286,10 @@
         room1 (first (:room-positions level))
         thing {:x (+ (:x room1) (/ (:width room1) 2))
                :y (+ (:y room1) (/ (:height room1) 2))
-               :radius 10
+               :radius (/ scale 3)
                :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
                :uuid (.slice (str (random-uuid)) 0 8)}]
-    [:svg {:key (js/Math.random)
-           :on-key-down #(process-game-key state %)
+    [:svg {:on-key-down #(process-game-key state %)
            :on-click #(run-simulation! state (:adjacent-positions level) [thing])
            :tabIndex 0
            :ref #(when % (.focus %))

@@ -37,6 +37,7 @@
         entity-bodies (map (fn [e]
                              (let [body (.circle Matter/Bodies (:x e) (:y e) (:radius e) (clj->js {:frictionAir 0.01
                                                                                                    :friction 0
+                                                                                                   :frictionStatic 0
                                                                                                    :restitution 1.0}))
                                    [x y] (:velocity e)
                                    velocity (.create Matter/Vector x y)]
