@@ -5,6 +5,7 @@
             [applied-science.js-interop :as j]
             [sitefox.ui :refer [log]]
             ["rot-js" :as ROT]
+            ["djb2a$default" :as djb2a]
             [smash.physics :refer [simulate]]))
 
 (log "loaded")
@@ -16,6 +17,10 @@
   {:screen :menu})
 
 (defonce state (r/atom (initial-state)))
+
+(defn make-rng [& args]
+  (js/console.log "make-rng" (.join (clj->js args) "-"))
+  (-> (ROT/RNG.clone) (.setSeed (djb2a (.join (clj->js args) "-")))))
 
 (defn get-map []
   (js/console.log "hi")
@@ -112,7 +117,7 @@
 
 (defn start-game [state]
   (let [scale initial-scale
-        seed (ROT/RNG.getUniform)
+        seed (-> (random-uuid) str (.replace (js/RegExp. "-" "g") "") (.substr 0 16))
         game-map (get-map)]
     (swap! state
            #(-> %
@@ -129,14 +134,14 @@
     27 (swap! state assoc :screen :menu)
     nil))
 
-(defn generate-greebles [{:keys [x y width height]}]
-  (let [greeble-count (inc (int (* (ROT/RNG.getUniform) 5)))]
+(defn generate-greebles [rng {:keys [x y width height]}]
+  (let [greeble-count (inc (int (* (.getUniform rng) 5)))]
     (for [_g (range greeble-count)]
-      (let [gs (* (ROT/RNG.getUniform) 5)
-            [rx ry] (map (fn [_] (ROT/RNG.getItem #js [1 2])) (range 2))
-            [gx gy] (map #(* (ROT/RNG.getUniform) (nth [width height] %)) (range 2))
-            [gxf gyf] (map #(+ (* (- (ROT/RNG.getUniform) 0.5) 20) %) [gx gy])]
-        (case (ROT/RNG.getItem #js [:circle :arc])
+      (let [gs (* (.getUniform rng) 5)
+            [rx ry] (map (fn [_] (.getItem rng #js [1 2])) (range 2))
+            [gx gy] (map #(* (.getUniform rng) (nth [width height] %)) (range 2))
+            [gxf gyf] (map #(+ (* (- (.getUniform rng) 0.5) 20) %) [gx gy])]
+        (case (.getItem rng #js [:circle :arc])
           :circle [:circle {:cx (+ x gx) :cy (+ y gy) :r gs
                             :fill "none"
                             :stroke "#5A5A56"
@@ -228,17 +233,18 @@
   (let [simulation (-> @state :simulation :sim)]
     [:text {:x 0 :y 0} (count simulation) " frames"]))
 
-(defn component-background [level scale]
-  (let [stroke-width 7
+(defn component-background [seed level scale]
+  (let [rng (make-rng "bg" seed)
+        stroke-width 7
         {:keys [adjacent-positions room-positions corridor-positions]} level]
     [:g
      ; draw hatching
      (for [{:keys [cx cy r] :as pos} adjacent-positions]
-       [:g {:transform (str "rotate(" (* (ROT/RNG.getUniform) 360) " " cx " " cy ")" )}
+       [:g {:transform (str "rotate(" (* (.getUniform rng) 360) " " cx " " cy ")" )}
         [:circle {:key (:key pos)
                   :fill "url(#hatch)"
-                  :cx (+ cx (* (- (ROT/RNG.getUniform) 0.5) (* scale 0.5)))
-                  :cy (+ cy (* (- (ROT/RNG.getUniform) 0.5) (* scale 0.5)))
+                  :cx (+ cx (* (- (.getUniform rng) 0.5) (* scale 0.5)))
+                  :cy (+ cy (* (- (.getUniform rng) 0.5) (* scale 0.5)))
                   :r r}]])
 
      ; draw outlines
@@ -275,16 +281,14 @@
      ; draw greebles
 
      (for [pos room-positions]
-       (generate-greebles pos))
+       (generate-greebles rng pos))
 
      (for [pos corridor-positions]
-       (generate-greebles pos))]))
+       (generate-greebles rng pos))]))
 
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
-  (let [scale (:scale @state)
-        game-map (:game-map @state)
-        level (:level @state)
+  (let [{:keys [scale game-map level seed]} @state
         size (:size game-map)
         [sx sy] (map #(+ (* % scale) (* scale 2)) size)
         room1 (first (:room-positions level))
@@ -303,7 +307,7 @@
 
      [component-defs scale]
 
-     [component-background level scale]
+     [component-background seed level scale]
 
      [component-simulation-count state]
 
