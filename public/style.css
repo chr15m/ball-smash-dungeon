@@ -29,6 +29,10 @@ h1, h2, h3 {
   font-family: 'Sigmar One', cursive;
 }
 
+svg:focus {
+  outline: none;
+}
+
 button {
   background-color: transparent;
   border-radius: 6px;
