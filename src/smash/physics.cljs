@@ -53,8 +53,6 @@
         (js/console.log "update:" c)
         (.update Matter/Engine e (/ 1000 60))
         (swap! sim conj (doall (map serialize-body entity-bodies)))
-        ;(log "sim" @sim)
-        ;(swap! sim conj )
         ; store positions etc.
         (when (or (not (all-bodies-at-rest (.allBodies Matter/Composite (.-world e))))
                   (< c 3))

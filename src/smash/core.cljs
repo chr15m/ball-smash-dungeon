@@ -80,7 +80,7 @@
                (= (get tiles [(+ ox x) (+ oy y)]) 0))))
    0))
 
-(defn run-simulation [state adjacent-tiles entities]
+(defn run-simulation! [state adjacent-tiles entities]
   (swap! state assoc :simulation
          (simulate adjacent-tiles entities)))
 
@@ -112,6 +112,42 @@
                  "V " scale)
             :stroke-width 1
             :stroke "#555"}]]])
+
+(defn offset-tuple [steps s]
+  (str
+    (int (- (-> s :position :x) (-> steps first :position :x)))
+    " "
+    (int (- (-> s :position :y) (-> steps first :position :y)))))
+
+(defn compute-path [steps]
+  (str
+    "M 0 0"
+    (apply str
+           (for [s (rest steps)]
+             (str "L " (offset-tuple steps s))))))
+
+(defn animate-body [steps]
+  (let [ms (* (count steps) (/ 1000 120))]
+    [:circle {:cx (-> steps first :position :x)
+              :cy (-> steps first :position :y)
+              :r (-> steps first :entity :radius)
+              :fill "#5A5A56"}
+     [:animateMotion {:dur (str ms "ms")
+                     :repeatCount 1
+                     :path (compute-path steps)}]]))
+
+(defn component-animated-bodies [simulation]
+  (let [animated-bodies
+        (vals (reduce
+                (fn [body-steps step]
+                  (reduce
+                    (fn [body-steps body]
+                      (update-in body-steps [(:uuid body)] conj body))
+                    body-steps step))
+                {} simulation))]
+    [:g
+     (for [body animated-bodies]
+       (animate-body (reverse body)))]))
 
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
@@ -174,10 +210,12 @@
         thing {:x (+ (:x room1) (/ (:width room1) 2))
                :y (+ (:y room1) (/ (:height room1) 2))
                :radius 10
-               :velocity [5 2]
-               :uuid (.slice (str (random-uuid)) 0 8)}]
-    [:svg {:on-key-down #(process-game-key state %)
-           :on-click #(run-simulation state adjacent-positions [thing])
+               :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
+               :uuid (.slice (str (random-uuid)) 0 8)}
+        simulation (-> @state :simulation :sim)]
+    [:svg {:key (js/Math.random)
+           :on-key-down #(process-game-key state %)
+           :on-click #(run-simulation! state adjacent-positions [thing])
            :tabIndex 0
            :ref #(when % (.focus %))
            :viewBox (str "-" scale " -" scale " " sx " " sy)
@@ -237,13 +275,15 @@
      (for [pos corridor-positions]
        (generate-greebles pos))
 
-     (for [step (-> @state :simulation :sim)
+     #_ (for [step (-> @state :simulation :sim)
            body step]
        [:circle {:cx (-> body :position :x)
                  :cy (-> body :position :y)
                  :r (-> body :entity :radius)
                  :fill "none"
                  :stroke "red"}])
+
+     [component-animated-bodies simulation]
 
      ; draw level rects
      #_ (for [body (-> @state :simulation :bodies)]
