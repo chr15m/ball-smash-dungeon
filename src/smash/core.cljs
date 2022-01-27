@@ -22,7 +22,7 @@
   (js/console.log "make-rng" (.join (clj->js args) "-"))
   (-> (ROT/RNG.clone) (.setSeed (djb2a (.join (clj->js args) "-")))))
 
-(defn get-map []
+(defn make-map []
   (js/console.log "hi")
   (let [digger (ROT/Map.Digger. map-size map-size
                                 (clj->js {:corridorLength [1 7]
@@ -118,15 +118,24 @@
 (defn start-game [state]
   (let [scale initial-scale
         seed (-> (random-uuid) str (.replace (js/RegExp. "-" "g") "") (.substr 0 16))
-        game-map (get-map)]
+        game-map (make-map)
+        level (calculate-level game-map scale)
+        room1 (first (:room-positions level))
+        player {:player true
+                :x (+ (:x room1) (/ (:width room1) 2))
+                :y (+ (:y room1) (/ (:height room1) 2))
+                :radius (/ scale 3)
+                :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
+                :uuid (.slice (str (random-uuid)) 0 8)}]
     (swap! state
            #(-> %
-                (assoc :seed seed)
-                (assoc :scale scale)
-                (assoc :game-map game-map)
-                (assoc :level (calculate-level game-map scale))
-                (dissoc :simulation)
-                (assoc :screen :game)))))
+                (assoc :seed seed
+                       :scale scale
+                       :game-map game-map
+                       :screen :game
+                       :entities [player]
+                       :level (calculate-level game-map scale))
+                (dissoc :simulation)))))
 
 (defn process-game-key [state ev]
   (js/console.log (aget ev "keyCode"))
@@ -155,8 +164,7 @@
                        :stroke-width 1}])))))
 
 (defn run-simulation! [state adjacent-tiles entities]
-  (swap! state assoc :simulation
-         (simulate adjacent-tiles entities)))
+  (swap! state assoc :simulation (simulate adjacent-tiles entities)))
 
 ; *** components *** ;
 
@@ -288,17 +296,11 @@
 
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
-  (let [{:keys [scale game-map level seed]} @state
+  (let [{:keys [scale game-map level seed entities]} @state
         size (:size game-map)
-        [sx sy] (map #(+ (* % scale) (* scale 2)) size)
-        room1 (first (:room-positions level))
-        thing {:x (+ (:x room1) (/ (:width room1) 2))
-               :y (+ (:y room1) (/ (:height room1) 2))
-               :radius (/ scale 3)
-               :velocity [(* (- (js/Math.random) 0.5) 10) (* (- (js/Math.random) 0.5) 10)]
-               :uuid (.slice (str (random-uuid)) 0 8)}]
+        [sx sy] (map #(+ (* % scale) (* scale 2)) size)]
     [:svg {:on-key-down #(process-game-key state %)
-           :on-click #(run-simulation! state (:adjacent-positions level) [thing])
+           :on-click #(run-simulation! state (:adjacent-positions level) entities)
            :tabIndex 0
            :ref #(when % (.focus %))
            :viewBox (str "-" scale " -" scale " " sx " " sy)
