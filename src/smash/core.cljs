@@ -10,7 +10,7 @@
 
 (log "loaded")
 
-(def initial-scale 25)
+(def initial-scale 35)
 (def map-size 25)
 
 (defn initial-state []
