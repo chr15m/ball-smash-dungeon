@@ -218,7 +218,8 @@
    [:p "a video game about smashing balls"]
    (when (:game-map @state)
      [:p [:button {:on-click #(swap! state assoc :screen :game)} "resume game"]])
-   [:p [:button {:on-click #(start-game state)} "new game"]]])
+   [:p [:button {:on-click #(start-game state)} "new game"]]
+   [:p [:a {:href "https://github.com/chr15m/ball-smash-dungeon/"} "source code"]]])
 
 (defn component-defs [scale]
   [:defs
