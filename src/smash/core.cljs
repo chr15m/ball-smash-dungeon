@@ -68,6 +68,27 @@
        %)
     entities))
 
+(defn offset-tuple [steps s]
+  (str
+    (int (- (-> s :position :x) (-> steps first :position :x)))
+    " "
+    (int (- (-> s :position :y) (-> steps first :position :y)))))
+
+(defn compute-path [steps]
+  (str
+    "M 0 0"
+    (apply str
+           (for [s (rest steps)]
+             (str "L " (offset-tuple steps s))))))
+
+(defn get-svg-position [svg x y]
+  (let [ctm (j/call svg :getScreenCTM)]
+    [(/ (- x (aget ctm "e")) (aget ctm "a"))
+     (/ (- y (aget ctm "f")) (aget ctm "d"))]))
+
+(defn get-game-surface []
+  (.querySelector js/document "#game"))
+
 (defn calculate-level [game-map scale]
   (let [{:keys [rooms corridors tiles]} game-map
         tile-positions (remove nil?
@@ -153,33 +174,41 @@
     27 (swap! state assoc :screen :menu)
     nil))
 
-(defn generate-greebles [rng {:keys [x y width height]}]
-  (let [greeble-count (inc (int (* (.getUniform rng) 5)))]
-    (for [_g (range greeble-count)]
-      (let [id (.getUniform rng)
-            gs (* (.getUniform rng) 5)
-            [rx ry] (map (fn [_] (.getItem rng #js [1 2])) (range 2))
-            [gx gy] (map #(* (.getUniform rng) (nth [width height] %)) (range 2))
-            [gxf gyf] (map #(+ (* (- (.getUniform rng) 0.5) 20) %) [gx gy])]
-        (case (.getItem rng #js [:circle :arc])
-          :circle [:circle {:key (str "greeble-circle-" id)
-                            :class "greeble-circle"
-                            :cx (+ x gx) :cy (+ y gy) :r gs
-                            :fill "none"
-                            :stroke "#5A5A56"
-                            :stroke-width 1}]
-          :arc [:path {:key (str "greeble-arc-" id)
-                       :d (str "M " (+ x gx) "," (+ y gy)
-                               "A " rx " " ry " "
-                               "0 0 1"
-                               (+ x gxf) " " (+ y gyf))
-                       :class "greeble-arc"
-                       :fill "none"
-                       :stroke "#5A5A56"
-                       :stroke-width 1}])))))
+(defn update-entity-positions-from-simulation [old-state]
+  (let [positions (into {} (map (fn [last-step] [(:uuid last-step) (:position last-step)]) (-> old-state :simulation :sim last)))
+        entities (-> old-state :entities)]
+    (log "positions" positions)
+    (log "entities" entities)
+    (assoc old-state :entities
+           (map
+             (fn [entity]
+               (log "updated:" entity (:uuid entity))
+               (let [new-position (get positions (:uuid entity))]
+                 (log "new-position" new-position)
+                 (if new-position
+                   (merge entity new-position)
+                   entity)))
+             entities))))
 
-(defn run-simulation! [state adjacent-tiles entities]
-  (swap! state assoc :simulation (simulate adjacent-tiles entities)))
+(defn run-simulation! [ev state]
+  (let [{:keys [level entities]} @state
+        svg (get-game-surface)
+        click-pos (get-svg-position svg (aget ev "clientX") (aget ev "clientY"))
+        player (get-player-entity entities)
+        velocity (map #(js/Math.max -10 (js/Math.min 10 (/ % 10)))
+                      [(- (first click-pos) (:x player))
+                       (- (second click-pos) (:y player))])
+        entities (update-entity entities :player :velocity velocity)]
+    (log "velocity" velocity)
+    (swap! state #(-> %
+                      (assoc :simulation (simulate (:adjacent-positions level) entities))
+                      (update-entity-positions-from-simulation)))
+    ; restart all the SVG animations
+    (when svg
+      (js/console.log "reset svg time")
+      (js/setTimeout
+        #(j/call-in svg [:setCurrentTime] 0)
+        100))))
 
 ; *** components *** ;
 
@@ -210,28 +239,7 @@
             :stroke-width 1
             :stroke "#555"}]]])
 
-(defn offset-tuple [steps s]
-  (str
-    (int (- (-> s :position :x) (-> steps first :position :x)))
-    " "
-    (int (- (-> s :position :y) (-> steps first :position :y)))))
-
-(defn compute-path [steps]
-  (str
-    "M 0 0"
-    (apply str
-           (for [s (rest steps)]
-             (str "L " (offset-tuple steps s))))))
-
-(defn get-svg-position [svg x y]
-  (let [ctm (j/call svg :getScreenCTM)]
-    [(/ (- x (aget ctm "e")) (aget ctm "a"))
-     (/ (- y (aget ctm "f")) (aget ctm "d"))]))
-
-(defn get-game-surface []
-  (.querySelector js/document "#game"))
-
-(defn animate-body [entity steps]
+(defn component-animate-body [entity steps]
   (let [ms (* (count steps) (/ 1000 120))]
     [:g {:key (:uuid entity)}
      [:circle {:cx (-> steps first :position :x)
@@ -256,7 +264,7 @@
                           {} simulation)]
     [:g
      (for [[uuid steps] animated-bodies]
-       (animate-body
+       (component-animate-body
          (first (filter #(= (:uuid %) uuid) entities))
          (reverse steps)))]))
 
@@ -279,6 +287,31 @@
                                 (when svg
                                   (let [pos (get-svg-position svg (aget ev "clientX") (aget ev "clientY"))]
                                     (swap! state assoc :indicator pos))))}]]))
+
+(defn component-generate-greebles [rng {:keys [x y width height]}]
+  (let [greeble-count (inc (int (* (.getUniform rng) 5)))]
+    (for [_g (range greeble-count)]
+      (let [id (.getUniform rng)
+            gs (* (.getUniform rng) 5)
+            [rx ry] (map (fn [_] (.getItem rng #js [1 2])) (range 2))
+            [gx gy] (map #(* (.getUniform rng) (nth [width height] %)) (range 2))
+            [gxf gyf] (map #(+ (* (- (.getUniform rng) 0.5) 20) %) [gx gy])]
+        (case (.getItem rng #js [:circle :arc])
+          :circle [:circle {:key (str "greeble-circle-" id)
+                            :class "greeble-circle"
+                            :cx (+ x gx) :cy (+ y gy) :r gs
+                            :fill "none"
+                            :stroke "#5A5A56"
+                            :stroke-width 1}]
+          :arc [:path {:key (str "greeble-arc-" id)
+                       :d (str "M " (+ x gx) "," (+ y gy)
+                               "A " rx " " ry " "
+                               "0 0 1"
+                               (+ x gxf) " " (+ y gyf))
+                       :class "greeble-arc"
+                       :fill "none"
+                       :stroke "#5A5A56"
+                       :stroke-width 1}])))))
 
 (defn component-simulation-count [state]
   (let [simulation (-> @state :simulation :sim)]
@@ -339,33 +372,19 @@
      ; draw greebles
 
      (for [pos room-positions]
-       (generate-greebles rng pos))
+       (component-generate-greebles rng pos))
 
      (for [pos corridor-positions]
-       (generate-greebles rng pos))]))
+       (component-generate-greebles rng pos))]))
 
 (defn component-game [state]
   (js/console.log "state" (clj->js @state))
-  (let [{:keys [scale game-map level seed entities]} @state
+  (let [{:keys [scale game-map level seed]} @state
         size (:size game-map)
         [sx sy] (map #(+ (* % scale) (* scale 2)) size)]
     [:svg {:id "game"
            :on-key-down #(process-game-key state %)
-           :on-click (fn [ev]
-                       (let [svg (get-game-surface)
-                             click-pos (get-svg-position svg (aget ev "clientX") (aget ev "clientY"))
-                             player (get-player-entity entities)
-                             velocity (map #(js/Math.max -10 (js/Math.min 10 (/ % 10)))
-                                           [(- (first click-pos) (:x player))
-                                            (- (second click-pos) (:y player))])
-                             entities (update-entity entities :player :velocity velocity)]
-                         (log "velocity" velocity)
-                         (run-simulation! state (:adjacent-positions level) entities)
-                         (when svg
-                           (js/console.log "reset svg time")
-                           (js/setTimeout
-                             #(j/call-in svg [:setCurrentTime] 0)
-                             100))))
+           :on-click #(run-simulation! % state)
            :tabIndex 0
            :ref #(when % (.focus %))
            :viewBox (str "-" scale " -" scale " " sx " " sy)
