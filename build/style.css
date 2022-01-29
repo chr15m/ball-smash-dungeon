@@ -1,0 +1,79 @@
+* {
+  font-family: 'Zen Kurenaido', sans-serif;
+}
+
+html, body, #app, #loading {
+  height: 100%;
+}
+
+body {
+  max-width: 100%;
+  width: 800px;
+  margin: auto;
+  background-color: #FAF8F1;
+  color: #393939;
+  font-size: 1.5em;
+}
+
+#app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+main {
+  text-align: center;
+}
+
+h1, h2, h3 {
+  font-family: 'Sigmar One', cursive;
+}
+
+svg:focus {
+  outline: none;
+}
+
+button {
+  background-color: transparent;
+  border-radius: 6px;
+  border: 2px solid #555;
+  color: #555;
+  font-weight: bold;
+  font-size: 1em;
+  min-width: 2em;
+  box-shadow: 0 6px #555;
+}
+
+button:hover {
+  box-shadow: 0 10px #555;
+  transform: translateY(-4px);
+}
+
+button:active {
+  box-shadow: 0 4px #555;
+  transform: translateY(2px);
+}
+
+/*** loader ***/
+
+#loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#loading div {
+  animation: spin 0.33s linear infinite;
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  border: 3px solid transparent;
+  border-left: 3px solid silver;
+  border-right: 3px solid silver;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+

@@ -1,0 +1,13 @@
+@font-face {
+  font-family: 'Zen Kurenaido';
+  font-style: normal;
+  font-weight: 400;
+  src: url(fonts/ZenKurenaido-regular.ttf) format('truetype');
+}
+
+@font-face {
+  font-family: 'Sigmar One';
+  font-style: normal;
+  font-weight: 400;
+  src: url(fonts/SigmarOne-regular.ttf) format('truetype');
+}
