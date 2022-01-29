@@ -61,6 +61,13 @@
 (defn get-player-entity [entities]
   (first (filter :player entities)))
 
+(defn update-entity [entities filter-pred k v]
+  (map
+    #(if (filter-pred %)
+       (assoc % k v)
+       %)
+    entities))
+
 (defn calculate-level [game-map scale]
   (let [{:keys [rooms corridors tiles]} game-map
         tile-positions (remove nil?
@@ -344,8 +351,15 @@
         [sx sy] (map #(+ (* % scale) (* scale 2)) size)]
     [:svg {:id "game"
            :on-key-down #(process-game-key state %)
-           :on-click (fn []
-                       (let [svg (get-game-surface)]
+           :on-click (fn [ev]
+                       (let [svg (get-game-surface)
+                             click-pos (get-svg-position svg (aget ev "clientX") (aget ev "clientY"))
+                             player (get-player-entity entities)
+                             velocity (map #(js/Math.max -10 (js/Math.min 10 (/ % 10)))
+                                           [(- (first click-pos) (:x player))
+                                            (- (second click-pos) (:y player))])
+                             entities (update-entity entities :player :velocity velocity)]
+                         (log "velocity" velocity)
                          (run-simulation! state (:adjacent-positions level) entities)
                          (when svg
                            (js/console.log "reset svg time")
@@ -369,12 +383,12 @@
      ;[component-indicator state]
 
      #_ (for [step simulation
-           body step]
-       [:circle {:cx (-> body :position :x)
-                 :cy (-> body :position :y)
-                 :r (-> body :entity :radius)
-                 :fill "none"
-                 :stroke "red"}])
+              body step]
+          [:circle {:cx (-> body :position :x)
+                    :cy (-> body :position :y)
+                    :r (-> body :entity :radius)
+                    :fill "none"
+                    :stroke "red"}])
 
      ; draw level rects
      #_ (for [body (-> @state :simulation :bodies)]
